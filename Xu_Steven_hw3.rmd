@@ -1,0 +1,264 @@
+---
+title: "Xu_Steven_hw3"
+author: "Steven Xu"
+date: "10/1/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,cache = TRUE)
+library(leaps)
+library(lars)
+prostate = read.table('https://web.stanford.edu/~hastie/ElemStatLearn/datasets/prostate.data')
+set.seed(790)
+```
+
+**1.**
+
+For a fixed $\lambda_2$, the elastic net problem can be transformed to an equivalent lasso problem by augmenting both the response vector and design matrix by means of
+
+$$
+\begin{aligned}
+\mathbf{X}^* = (1+\lambda_2)^{-1/2}\begin{pmatrix}\mathbf{X}\\\sqrt{\lambda_2}\mathbf{I}\end{pmatrix}, \ \mathbf{y}^* = \begin{pmatrix}y\\\mathbf{0}\end{pmatrix}
+\end{aligned}
+$$
+Then the loss function will consist only a $L_1$ penalty on
+
+$$
+\begin{aligned}
+\beta^* = \sqrt{1+\lambda_2}\beta
+\end{aligned}
+$$
+with penalty coefficient $\gamma=\lambda_1/\sqrt{1+\lambda_2}$
+
+The solution to the elastic net can then be retrieved by transforming the solution to the above system by 
+$$
+\begin{aligned}
+\hat{\mathbf{\beta}}=\frac{1}{\sqrt{1+\lambda_2}}\hat{\mathbf{\beta}}^*
+\end{aligned}
+$$
+
+**2.**
+
+**(a)**
+
+```{r p2a}
+p = 8
+pro_train = subset(prostate,train==TRUE)[,-10]
+n_train = nrow(pro_train)
+pro_test = subset(prostate,train==FALSE)[,-10]
+n_test = nrow(pro_test)
+fit_train = lm(lpsa~.,data=pro_train)
+
+#summary(fit_train)
+
+smry = summary(fit_train)
+R2 = round(smry$r.squared,4)
+p_val = smry$coefficients[,4]
+sig_coef = names(p_val[p_val<0.05])
+
+yhat_train = fit_train$fitted.values
+yhat_test = predict(fit_train,newdata = pro_test)
+y_train = pro_train[,9]
+y_test = pro_test[,9]
+train_err = round(mean((y_train-yhat_train)^2),4)
+test_err = round(mean((y_test-yhat_test)^2),4)
+smry
+```
+
+Based on the ouput we can see that $R^2$ = `r R2`, the set of significant predictors are lcavol, lweight, lbph, svi. TrainErr = `r train_err` and TestErr = `r test_err`.
+
+**(b)-(c)**
+
+```{r p2b}
+reg_out = regsubsets(lpsa ~ ., data = pro_train, nbest = 1, method = "forward")
+
+#summary(reg_out)
+cat('The sets of regression coefficients for M1 - M8 along with the estimated TrainErr,BIC,AIC are','\n')
+
+train_err_sub = {}
+train_bic_sub = {}
+train_aic_sub = {}
+for(i in 1:8){
+  cur_coef = coef(reg_out,i)
+  cat(paste('M',i,sep=''),'\n')
+  print(cur_coef)
+  cur_X = cbind(1,as.matrix(pro_train[,names(cur_coef)[-1]]))
+  cur_yhat = cur_X%*%cur_coef
+  train_err_sub[i] = mean((y_train-cur_yhat)^2)
+  train_bic_sub[i] = n_train*log(train_err_sub[i])+log(n_train)*ncol(cur_X)
+  train_aic_sub[i] = n_train*log(train_err_sub[i])+2*ncol(cur_X)
+  cat('\n')
+  cat('TrainErr =',train_err_sub[i],'\n')
+  cat('BIC =',train_bic_sub[i],'\n')
+  cat('AIC =',train_aic_sub[i],'\n')
+  cat('\n')
+}
+
+loc_best_bic = which.min(train_bic_sub)
+best_coef_bic = coef(reg_out,loc_best_bic)
+best_coef_name_bic = names(best_coef_bic)
+best_X_bic = cbind(1,as.matrix(pro_test[,best_coef_name_bic[-1]]))
+best_yhat_bic = best_X_bic%*%best_coef_bic
+test_err_best_bic = round(mean((y_test-best_yhat_bic)^2),4)
+
+loc_best_aic = which.min(train_aic_sub)
+best_coef_aic = coef(reg_out,loc_best_aic)
+best_coef_name_aic = names(best_coef_aic)
+best_X_aic = cbind(1,as.matrix(pro_test[,best_coef_name_aic[-1]]))
+best_yhat_aic = best_X_aic%*%best_coef_aic
+test_err_best_aic = mean((y_test-best_yhat_aic)^2)
+```
+
+The model that minimizes BIC is M`r loc_best_bic`, with set of important variables being lcavol, lweight. The TestErr of the refitted OLS is `r test_err_best_bic`.
+
+The model that minimizes AIC is M`r loc_best_aic`, with set of important variables being lcavol, lweight, age, lbph, svi, lcp, pgg45. The TestErr of the refitted OLS is `r test_err_best_aic`.
+
+
+**3.**
+
+**Part 1**
+
+Before running further analysis, the design matrix is centered by column means and scaled by column $L_2$-norms. By centering the design matrix, the estimated intercept for all below models are directly calculated by taking the sample mean of the response. 
+
+Since by default **cv.lars()** and **lars()** output the estimated fraction (s), the corresponding $\lambda$ is found by method of root searching using **uniroot**.
+
+```{r p3,results = FALSE}
+p = 8
+pro_train = subset(prostate,train==TRUE)[,-10]
+n_train = nrow(pro_train)
+pro_test = subset(prostate,train==FALSE)[,-10]
+n_test = nrow(pro_test)
+y_train = pro_train[,9]
+y_test = pro_test[,9]
+X_train = as.matrix(pro_train[,-9])
+train_m = colMeans(X_train)
+train_norm = sqrt(colSums(scale(X_train,TRUE,FALSE)^2))
+X_train_std = scale(X_train,train_m,train_norm)
+X_test = as.matrix(pro_test[,-9])
+X_test_std = scale(X_test,train_m,train_norm)
+```
+
+**(a)**
+
+```{r p3a}
+lasso_in = seq(0,1,length=100)
+lasso_cv = cv.lars(X_train_std,y_train,index=lasso_in,K=5,normalize = FALSE,plot.it = FALSE)
+lasso_min = which.min(lasso_cv$cv)
+best_min_frac = lasso_in[lasso_min]
+fit_lasso = lars(X_train_std,y_train,type="lasso",normalize = FALSE)
+best_min_coef = predict(fit_lasso,s=best_min_frac,type="coef",mode="frac")$coefficients
+#Since X is centered, the estimated intercept is just the sample mean of y
+int_coef = mean(y_train) 
+#c(int_coef,best_min_coef)
+lambda_search = function(x){
+    sum(abs(coef(fit_lasso,s=x,mode="lambda")))-targetL1norm
+}
+targetL1norm = sum(abs(best_min_coef))
+#By some trial and error I found that the target lambda range
+#should be between 0.1 and 0.2
+target_lambda_min = round(uniroot(lambda_search,c(0.1,0.2))$root,4)
+yhat_test_min = predict(fit_lasso,newx=X_test_std,s=best_min_frac,mode="frac")$fit
+test_err_min = mean((y_test-yhat_test_min)^2)
+
+cat('The best lambda is',target_lambda_min,'\n')
+cat('The selected model and its estimated regression coefficients are','\n')
+print(best_min_coef)
+cat('TestErr =',test_err_min,'\n')
+```
+
+**(b)**
+
+```{r p3b}
+bound<-lasso_cv$cv[lasso_min]+lasso_cv$cv.error[lasso_min]
+best_one_frac<-lasso_in[min(which(lasso_cv$cv<bound))]
+best_one_coef <- coef(fit_lasso, s=best_one_frac, mode="frac")
+#c(int_coef,best_one_coef)
+targetL1norm = sum(abs(best_one_coef))
+#Again, by some trial and error I found that the target lambda range
+#should be between 1.2 and 1.3
+target_lambda_one = round(uniroot(lambda_search,c(1.2,1.3))$root,4)
+yhat_test_one = predict(fit_lasso,newx=X_test_std,s=best_one_frac,mode="frac")$fit
+test_err_one = mean((y_test-yhat_test_one)^2)
+cat('The best lambda is',target_lambda_one,'\n')
+cat('The selected model and its estimated regression coefficients are','\n')
+print(best_one_coef)
+cat('TestErr =',test_err_one,'\n')
+```
+
+**Part 2**
+
+Convergence is detected if the change of $L_1$-norm is small (<$10^{-5}$) for more than 5 iterations.
+
+```{r p32}
+ols_coef = lm(lpsa~.,data=data.frame(cbind(lpsa=y_train,X_train_std)))$coefficients
+beta_in = ols_coef[-1]
+s_fun = function(beta,j,X,y){
+  xj = t(X[,j])
+  s = xj%*%X[,-j]%*%(2*beta[-j])-2*xj%*%y
+  return(s)
+}
+lambda = 10^seq(-2,2,length.out = 100)
+beta_mat = matrix(0,nrow=length(lambda),ncol=p)
+BIC_vec = rep(0,length(lambda))
+colnames(beta_mat) = names(beta_in)
+for(i in 1:length(lambda)){
+  pre_L1norm = sum(abs(beta_in))
+  beta_hat = beta_in
+  counter = 0
+  while(counter <= 5){
+    for(j in 1:p){
+      s0 = s_fun(beta_hat,j,X_train_std,y_train)
+      beta_hat[j] = (s0 > lambda[i])*(lambda[i]-s0)/2 +
+        (s0 < -lambda[i])*(-lambda[i]-s0)/2
+    }
+    cur_L1norm = sum(abs(beta_hat))
+    if(abs(cur_L1norm-pre_L1norm)<1e-5){
+      counter = counter + 1
+    }
+    pre_L1norm = cur_L1norm
+  }
+  yhat_train = X_train_std%*%beta_hat + int_coef
+  BIC_vec[i] = n_train*log(mean((y_train-yhat_train)^2))+log(n_train)*(sum(beta_hat!=0)+1)
+  beta_mat[i,] = beta_hat
+}
+best_BIC_loc = which.min(BIC_vec)
+best_lambda_shoot = round(lambda[best_BIC_loc],4)
+best_coef_shoot = beta_mat[best_BIC_loc,]
+yhat_test = X_test_std%*%best_coef_shoot + int_coef
+test_err = mean((y_test-yhat_test)^2)
+cat('The best lambda is',best_lambda_shoot,'with a BIC of',round(BIC_vec[best_BIC_loc],4),'\n')
+cat('The selected model and its estimated coefficients are','\n')
+print(best_coef_shoot)
+cat('TestErr =',test_err)
+```
+
+**Part 3**
+
+```{r p33}
+w = abs(beta_in)
+X_train_adapt = scale(X_train_std,FALSE,1/w)
+fit_lasso_adapt = lars(X_train_adapt,y_train,type="lasso",normalize = FALSE)
+index = seq(0,1,length.out = 100)
+beta_adapt_list = vector('list',length(index))
+BIC_adapt = {}
+for(s in 1:length(index)){
+  beta_adapt_scale = predict(fit_lasso_adapt,s=index[s],type="coef",mode="frac")$coefficients
+  beta_adapt = beta_adapt_scale*w
+  yhat_train_adapt = X_train_std%*%beta_adapt + int_coef
+  train_err_adapt = mean((y_train-yhat_train_adapt)^2)
+  beta_adapt_list[[s]] = beta_adapt
+  BIC_adapt[s] = n_train*log(mean((y_train-yhat_train_adapt)^2))+log(n_train)*(sum(beta_adapt!=0)+1)
+}
+best_BIC_loc_adapt = which.min(BIC_adapt)
+best_frac_adapt = index[best_BIC_loc_adapt]
+best_coef_adapt = beta_adapt_list[[best_BIC_loc_adapt]]
+yhat_test = X_test_std%*%best_coef_adapt + int_coef
+test_err = mean((y_test-yhat_test)^2)
+targetL1norm = sum(abs(best_coef_adapt))
+target_lambda_adapt = round(uniroot(lambda_search,c(0.4,0.5))$root,4)
+cat('The best lambda is',target_lambda_adapt,'with a BIC of',round(BIC_adapt[best_BIC_loc_adapt],4),'\n')
+cat('The selected model and its estimated coefficients are','\n')
+print(best_coef_adapt)
+cat('TestErr =',test_err)
+```

@@ -1,0 +1,17 @@
+load(file="~/hw4_train.rda")
+load(file="~/hw4_test.rda")
+b_intercept_bayes = (sum(mu_r^2)-sum(mu_g^2))/(2*mu_r[2]-mu_g[2])
+b_slope_bayes = -(mu_r[1]-mu_g[1])/(mu_r[2]-mu_g[2])
+b_pred_train = ifelse(dtrain$x2-dtrain$x1*b_slope_bayes-b_intercept_bayes>0,1,0)
+result_train = table(dtrain$y,b_pred_train)
+result_train
+b_fp_train = result_train[1,2]/sum(result_train[1,])
+b_fn_train = result_train[2,1]/sum(result_train[2,])
+b_mc_train = (result_train[1,2]+result_train[2,1])/sum(result_train)
+b_pred_test = ifelse(dtest$x2-dtest$x1*b_slope_bayes-b_intercept_bayes>0,1,0)
+result_test = table(dtest$y,b_pred_test)
+result_test
+b_fp_test = result_test[1,2]/sum(result_test[1,])
+b_fn_test = result_test[2,1]/sum(result_test[2,])
+b_mc_test = (result_test[1,2]+result_test[2,1])/sum(result_test)
+abline(coef=c(b_intercept_bayes,b_slope_bayes),col="blue",lty=2)
