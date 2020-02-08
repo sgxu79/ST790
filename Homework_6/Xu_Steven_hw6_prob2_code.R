@@ -32,9 +32,11 @@ dtest$y = factor(dtest$y)
 #Linear kernel
 
 svm_lin_fit = tune(svm, y~x1+x2, data = dtrain, validation.x = dtest,
-                   ranges = list(cost = 2^seq(-5,15,length.out = 20)),
+                   ranges = list(cost = 2^seq(-8,8,length.out = 50)),
                    tunecontrol = tune.control(sampling = "fix"),kernel = "linear")
 
+
+svm_lin_fit
 
 #Polynomial kernel
 #Some parameter combinations results in max iteration warning, so they were discarded
@@ -43,10 +45,12 @@ svm_poly_fit = tune(svm, y~x1+x2, data = dtrain, validation.x = dtest,
                    ranges = list(degree = 1:6, gamma = seq(0.001,1,length.out = 10),coef0 = seq(0,3,0.2),cost = 2^seq(-6,3,length.out = 10)),
                    tunecontrol = tune.control(sampling = "fix"),kernel = "polynomial")
 
+svm_poly_fit
+
 #rbf kernel
 
 svm_rbf_fit = tune(svm, y~x1+x2, data = dtrain, validation.x = dtest,
-                    ranges = list(gamma = 2^seq(-15,4,length.out = 20),cost = 2^seq(-5,15,length.out = 20)),
+                    ranges = list(gamma = 2^seq(-15,4,length.out = 50),cost = 2^seq(-5,5,length.out = 50)),
                     tunecontrol = tune.control(sampling = "fix"),kernel = "radial")
 
-
+svm_rbf_fit
