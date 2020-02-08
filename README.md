@@ -1,2 +1,2 @@
 # ST790
-Slides and Homework for Introduction to Machine Learning and Data Mining
+Coursework for Introduction to Machine Learning and Data Mining at North Carolina State University.
