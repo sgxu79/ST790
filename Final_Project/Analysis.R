@@ -20,8 +20,8 @@ library(doRNG)
 library(forecast)
 library(ggpubr)
 
-register_google(key = "AIzaSyAa3RgyHheO0XHXryS54dhtk9CbUq8Ktlc")
-data_raw = read.csv(file="Data Science ZExercise_TRAINING_CONFIDENTIAL1.csv")
+register_google(key = "...")
+data_raw = read.csv(file="...")
 
 #Map raw data
 
